@@ -30,19 +30,24 @@ function pchip(xs,ys){var n=xs.length,h=[],d=[],i;
    ({terms:[3,4,5,8,10], max:[...], min:[...]}, en % del total del plazo).
    Los dias de cada termino son dias calendario desde hoy, como el sistema.
    Sin ACS.ADMIN en la tabla se cae a la curva vieja (pchip sobre AC0/AC100). */
+var D0=new Date(); D0=new Date(D0.getFullYear(),D0.getMonth(),D0.getDate());
+/* Términos en años <-> días calendario desde hoy. Cada año cuenta con su
+   largo real (365 o 366), así los años enteros caen justo en su aniversario
+   y cualquier cantidad de días tiene un único término equivalente. */
+function yDays(y){return Math.round((new Date(D0.getFullYear()+y,D0.getMonth(),D0.getDate())-D0)/864e5);}
+function daysOf(T){var y=Math.floor(T+1e-9),a=yDays(y);return a+(T-y)*(yDays(y+1)-a);}
+function yearsOf(days){var y=0;while(yDays(y+1)<=days)y++;
+  var a=yDays(y);return y+(days-a)/(yDays(y+1)-a);}
+/* Interpolación lineal por días: anclas en años (ts), valores ys, término T. */
+function linDays(ts,ys,T){var AD=ts.map(daysOf),x=daysOf(T),n=AD.length,k;
+  if(x<=AD[0])return ys[0]; if(x>=AD[n-1])return ys[n-1];
+  for(k=0;k<n-1;k++){if(x<=AD[k+1])break;}
+  return ys[k]+(ys[k+1]-ys[k])*(x-AD[k])/(AD[k+1]-AD[k]);}
+
 var ac0, ac100, ADMIN=ACS.ADMIN;
 if(ADMIN){
-  var D0=new Date(); D0=new Date(D0.getFullYear(),D0.getMonth(),D0.getDate());
-  var daysOf=function(T){var y=Math.floor(T+1e-9),
-    d=new Date(D0.getFullYear()+y,D0.getMonth(),D0.getDate());
-    return Math.round((d-D0)/864e5)+(T-y)*365;};
-  var AD=ADMIN.terms.map(daysOf);
-  var lin=function(ys,x){var n=AD.length,k;
-    if(x<=AD[0])return ys[0]; if(x>=AD[n-1])return ys[n-1];
-    for(k=0;k<n-1;k++){if(x<=AD[k+1])break;}
-    return ys[k]+(ys[k+1]-ys[k])*(x-AD[k])/(AD[k+1]-AD[k]);};
-  ac0=function(T){var d=daysOf(T);return lin(ADMIN.max,d)/(d/365);};
-  ac100=function(T){var d=daysOf(T);return lin(ADMIN.min,d)/(d/365);};
+  ac0=function(T){return linDays(ADMIN.terms,ADMIN.max,T)/(daysOf(T)/365);};
+  ac100=function(T){return linDays(ADMIN.terms,ADMIN.min,T)/(daysOf(T)/365);};
 }else{
   var order=[10,9,8,7,6,5,4,3];
   var xs=order.map(function(t){return 1/t;});
@@ -54,10 +59,15 @@ function acOf(T,s){var a=ac0(T);return a+(ac100(T)-a)*s/100;}
 function sacFromAc(T,v){var a=ac0(T),b=ac100(T);return (a-v)/(a-b)*100;}
 
 /* ── Comisión: escala fija de la estructura ─────────────────────────
-   Cada nivel trae su ACS publicado a 3, 5, 8 y 10 años; entre esos
-   términos se interpola. Comisión = ACS × Prima × (1 − Sacrificio%). */
+   Cada nivel trae su ACS publicado a 3, 5, 8 y 10 años. Como el sistema,
+   se interpola LINEAL POR DÍAS entre 3, 4, 5, 8 y 10 años; el ancla de
+   4 años es el punto medio entre 3 y 5 (en el sistema: 1.75 / 2.75 / 3.75).
+   Comisión = ACS × Prima × (1 − Sacrificio%). */
 var LVL={}, COM={};
-LEVELS.forEach(function(L){ LVL[L.n]=L; COM[L.n]=pchip(COM_TERMS,L.acs); });
+LEVELS.forEach(function(L){ LVL[L.n]=L;
+  var ts=COM_TERMS.slice(), ys=L.acs.slice(), i3=ts.indexOf(3), i5=ts.indexOf(5);
+  if(ts.indexOf(4)<0 && i3>=0 && i5===i3+1){ ts.splice(i5,0,4); ys.splice(i5,0,(ys[i3]+ys[i5])/2); }
+  COM[L.n]=function(T){return linDays(ts,ys,T);}; });
 function comPctOf(T,nivel){var f=COM[nivel];return f?f(T):null;}
 function comMaxOf(prima,T,nivel){var q=comPctOf(T,nivel);
   return q===null?null:prima*q/100;}
@@ -67,6 +77,9 @@ var st={prima:100000,T:10,nivel:ACS.DEFAULT_LEVEL,s:0,mode:"y",ymd:{y:10,m:0,d:0
 var $=function(id){return document.getElementById(id);};
 var fmtM=new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0});
 var fmtM2=new Intl.NumberFormat("en-US",{maximumFractionDigits:0});
+/* Montos de comisión con centavos, como el sistema (redondeo a 2 decimales). */
+var fmtC=new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",minimumFractionDigits:2,maximumFractionDigits:2});
+function r2(v){return Math.round(v*100)/100;}
 function pct(v,d){return v.toFixed(d==null?2:d);}
 function pctLvl(v){return pct(v,v%1?1:0);}
 /* El sacrificio admite 2 decimales: se muestran solo si el valor los tiene. */
@@ -102,7 +115,7 @@ function setSpec(y,m,d){
   else { var days=calDays(y,m,d);
     if(days<DMIN) err="The term must be at least 3 years.";
     else if(days>DMAX) err="The term cannot exceed 10 years.";
-    else { st.mode="s"; st.ymd={y:y,m:m,d:d}; st.T=y+(days-calDays(y,0,0))/365; st.days=days; } }
+    else { st.mode="s"; st.ymd={y:y,m:m,d:d}; st.T=yearsOf(days); st.days=days; } }
   termErr(err);
   if(!err) render();
 }
@@ -179,7 +192,7 @@ function wireChart(){
   hit.addEventListener("mousemove",function(ev){
     var T=tAt(ev),v=acOf(T,st.s),cx=comMaxOf(st.prima,T,st.nivel),cm=cx===null?null:cx*(1-st.s/100);
     cross.setAttribute("x1",px(T));cross.setAttribute("x2",px(T));cross.setAttribute("opacity","1");
-    tt.innerHTML="<b>"+pct(v)+"%</b> admin charge<br>"+pct(T,2)+" years · sacrifice "+sacTxt(st.s)+"%"+((primaOk&&cm!==null)?"<br>commission "+fmtM.format(cm):"");
+    tt.innerHTML="<b>"+pct(v)+"%</b> admin charge<br>"+pct(T,2)+" years · sacrifice "+sacTxt(st.s)+"%"+((primaOk&&cm!==null)?"<br>commission "+fmtC.format(r2(cm)):"");
     var r=svg.getBoundingClientRect(),wr=$("chartWrap").getBoundingClientRect();
     var lx=r.left-wr.left+px(T)/W*r.width, ly=r.top-wr.top+py(v)/H*r.height;
     tt.style.opacity="1";
@@ -231,17 +244,17 @@ function render(){
   if(document.activeElement!==$("tsD")) $("tsD").value=st.ymd.d;
   $("termEcho").textContent=spec?(pct(T,2)+" yrs · "+nf(st.days)+" days"):termTxt();
   $("sac").value=sacN(s); $("sacR").value=s;
-  if(hasCom){ $("com").value=Math.round(c); $("com").disabled=false; }
+  if(hasCom){ if(document.activeElement!==$("com")) $("com").value=r2(c).toFixed(2); $("com").disabled=false; }
   else { $("com").value=""; $("com").disabled=true; }
   $("ac").value=+v.toFixed(3);
   $("comMax").textContent = hasCom
-    ? ("Max at "+termTxt()+", level "+st.nivel+": "+fmtM.format(cmax)+" · "+pct(q)+"% of premium")
+    ? ("Max at "+termTxt()+", level "+st.nivel+": "+fmtC.format(r2(cmax))+" · "+pct(q)+"% of premium")
     : "No calculation until the premium is fixed.";
-  $("acBps").textContent=Math.round(v*100)+" bps p.a. · range "+pct(b)+"–"+pct(a)+"%";
+  $("acBps").textContent="Full value "+(v/100).toFixed(12)+" · "+Math.round(v*100)+" bps p.a. · range "+pct(b)+"–"+pct(a)+"%";
   $("curveEcho").textContent=sacTxt(s)+"%";
   var dAc=(a-b)*0.10, dCom=hasCom?cmax*0.10:0;
   $("d10ac").textContent="−"+pct(dAc)+"% ("+Math.round(dAc*100)+" bps)";
-  $("d10com").textContent=hasCom?("−"+fmtM.format(dCom)):"—";
+  $("d10com").textContent=hasCom?("−"+fmtC.format(r2(dCom))):"—";
   $("d10r").textContent=hasCom?(fmtM2.format(Math.round(dCom/(dAc*100)))+" USD"):"—";
   drawChart(); highlight();
   lock=false;
@@ -278,7 +291,7 @@ $("copy").addEventListener("click",function(){
   var T=st.T,cmax=comMaxOf(st.prima,T,st.nivel);
   var txt="Premium "+fmtM.format(st.prima)+" · term "+termTxt()+" · level "+st.nivel+
     " · sacrifice "+sacTxt(st.s)+"%"+
-    (cmax===null?"":" → commission "+fmtM.format(cmax*(1-st.s/100)))+
+    (cmax===null?"":" → commission "+fmtC.format(r2(cmax*(1-st.s/100))))+
     " · admin charge "+pct(acOf(T,st.s))+"% p.a.";
   var b=this;
   if(!primaOk) txt="Premium outside the accepted range · term "+termTxt()+" · sacrifice "+sacTxt(st.s)+
