@@ -54,6 +54,19 @@ input[type=range]{width:100%;accent-color:var(--teal);margin:0}
 .rail{display:flex;gap:9px;align-items:center}
 .rail input[type=number]{width:92px;flex:0 0 auto}
 .rail input[type=range]{flex:1}
+/* term: modo años / término específico */
+.seg{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;background:var(--surface-2)}
+.seg label{flex:1;position:relative;cursor:pointer}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg span{display:block;text-align:center;padding:6px 8px;font-size:12.5px;color:var(--muted);font-weight:500}
+.seg label+label span{border-left:1px solid var(--line)}
+.seg input:checked+span{background:var(--surface);color:var(--teal);font-weight:600}
+.seg input:focus-visible+span{outline:2px solid var(--teal);outline-offset:-2px}
+.ymd{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.ymd[hidden]{display:none}
+.ymd label{display:flex;flex-direction:column;gap:3px;min-width:0}
+.ymd input{padding:8px 9px}
+input.bad{border-color:var(--amber)}
 
 /* ---- tablero principal ---- */
 .board{overflow:hidden}

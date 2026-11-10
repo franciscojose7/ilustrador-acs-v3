@@ -63,7 +63,7 @@ function comMaxOf(prima,T,nivel){var q=comPctOf(T,nivel);
   return q===null?null:prima*q/100;}
 
 /* ── Estado y formato ───────────────────────────────────────────────── */
-var st={prima:100000,T:10,nivel:ACS.DEFAULT_LEVEL,s:0},primaOk=true;
+var st={prima:100000,T:10,nivel:ACS.DEFAULT_LEVEL,s:0,mode:"y",ymd:{y:10,m:0,d:0},days:0},primaOk=true;
 var $=function(id){return document.getElementById(id);};
 var fmtM=new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0});
 var fmtM2=new Intl.NumberFormat("en-US",{maximumFractionDigits:0});
@@ -72,6 +72,40 @@ function pctLvl(v){return pct(v,v%1?1:0);}
 /* El sacrificio admite 2 decimales: se muestran solo si el valor los tiene. */
 function sacN(v){return Math.round(v*100)/100;}
 function sacTxt(v){var r=sacN(v);return r%1?r.toFixed(2):String(r);}
+
+/* ── Término: años enteros o término específico (años, meses, días) ────
+   Como en la eApp: el término específico se cuenta en días calendario
+   desde hoy y tiene que quedar entre 3 y 10 años. st.T se guarda en años
+   de forma que daysOf(st.T) dé exactamente esos días. */
+var TD=new Date(); TD=new Date(TD.getFullYear(),TD.getMonth(),TD.getDate());
+function calDays(y,m,d){return Math.round((new Date(TD.getFullYear()+y,TD.getMonth()+m,TD.getDate()+d)-TD)/864e5);}
+var DMIN=calDays(3,0,0), DMAX=calDays(10,0,0);
+function nf(v){return new Intl.NumberFormat("en-US").format(v);}
+function plural(n,w){return n+" "+w+(n===1?"":"s");}
+function termTxt(){
+  if(st.mode==="y") return plural(st.T,"year");
+  var p=[plural(st.ymd.y,"year")];
+  if(st.ymd.m) p.push(plural(st.ymd.m,"month"));
+  if(st.ymd.d) p.push(plural(st.ymd.d,"day"));
+  return p.join(" ");
+}
+function termErr(err){var msg=$("termErr");
+  msg.textContent=err; msg.classList.toggle("on",!!err);
+  ["tsY","tsM","tsD"].forEach(function(id){$(id).classList.toggle("bad",!!err);});}
+function setYears(y){termErr("");st.mode="y";st.T=y;st.ymd={y:y,m:0,d:0};render();}
+function setSpec(y,m,d){
+  var err="";
+  if(![y,m,d].every(function(v){return isFinite(v)&&v>=0&&Math.floor(v)===v;}))
+    err="Enter whole numbers of years, months and days.";
+  else if(m>11) err="Months must be between 0 and 11.";
+  else if(d>30) err="Days must be between 0 and 30.";
+  else { var days=calDays(y,m,d);
+    if(days<DMIN) err="The term must be at least 3 years.";
+    else if(days>DMAX) err="The term cannot exceed 10 years.";
+    else { st.mode="s"; st.ymd={y:y,m:m,d:d}; st.T=y+(days-calDays(y,0,0))/365; st.days=days; } }
+  termErr(err);
+  if(!err) render();
+}
 
 var selN=$("nivel");
 LEVELS.forEach(function(L){var o=document.createElement("option");
@@ -188,14 +222,20 @@ function render(){
   var a=ac0(T),b=ac100(T),v=acOf(T,s);
   var q=comPctOf(T,st.nivel), cmax=comMaxOf(st.prima,T,st.nivel);
   var hasCom=primaOk&&cmax!==null, c=hasCom?cmax*(1-s/100):0;
-  $("termN").value=T; $("termR").value=T;
-  $("termEcho").textContent=(T%1===0?T:pct(T,2))+" years";
+  var spec=st.mode==="s";
+  document.querySelector("input[name=tmode][value='"+st.mode+"']").checked=true;
+  $("termY").hidden=spec; $("tSpec").hidden=!spec;
+  if(!spec) $("termY").value=T;
+  if(document.activeElement!==$("tsY")) $("tsY").value=st.ymd.y;
+  if(document.activeElement!==$("tsM")) $("tsM").value=st.ymd.m;
+  if(document.activeElement!==$("tsD")) $("tsD").value=st.ymd.d;
+  $("termEcho").textContent=spec?(pct(T,2)+" yrs · "+nf(st.days)+" days"):termTxt();
   $("sac").value=sacN(s); $("sacR").value=s;
   if(hasCom){ $("com").value=Math.round(c); $("com").disabled=false; }
   else { $("com").value=""; $("com").disabled=true; }
   $("ac").value=+v.toFixed(3);
   $("comMax").textContent = hasCom
-    ? ("Max at "+(T%1===0?T:pct(T,2))+" years, level "+st.nivel+": "+fmtM.format(cmax)+" · "+pct(q)+"% of premium")
+    ? ("Max at "+termTxt()+", level "+st.nivel+": "+fmtM.format(cmax)+" · "+pct(q)+"% of premium")
     : "No calculation until the premium is fixed.";
   $("acBps").textContent=Math.round(v*100)+" bps p.a. · range "+pct(b)+"–"+pct(a)+"%";
   $("curveEcho").textContent=sacTxt(s)+"%";
@@ -207,11 +247,23 @@ function render(){
   lock=false;
 }
 function setS(v){st.s=Math.min(100,Math.max(0,v));render();}
-function setT(v){st.T=Math.min(10,Math.max(3,v));render();}
+/* Desde el gráfico: términos en cuartos de año. Entero -> modo años;
+   si no, término específico con los meses equivalentes. */
+function setT(v){v=Math.min(10,Math.max(3,v));
+  if(v%1===0) setYears(v); else setSpec(Math.floor(v),Math.round((v%1)*12),0);}
 
 /* ── Eventos ────────────────────────────────────────────────────────── */
-$("termN").addEventListener("input",function(){if(!lock&&this.value!=="")setT(parseFloat(this.value));});
-$("termR").addEventListener("input",function(){if(!lock)setT(parseFloat(this.value));});
+for(var ty=3;ty<=10;ty++){var ot=document.createElement("option");
+  ot.value=ty;ot.textContent=plural(ty,"year");$("termY").appendChild(ot);}
+$("termY").addEventListener("change",function(){setYears(parseInt(this.value,10));});
+Array.prototype.forEach.call(document.querySelectorAll("input[name=tmode]"),function(r){
+  r.addEventListener("change",function(){
+    if(this.value==="y") setYears(Math.min(10,Math.max(3,Math.round(st.T))));
+    else setSpec(st.ymd.y,st.ymd.m,st.ymd.d);});});
+["tsY","tsM","tsD"].forEach(function(id){$(id).addEventListener("input",function(){
+  if(lock) return;
+  var g=function(k){var v=$(k).value;return v===""?0:Number(v);};
+  setSpec(g("tsY"),g("tsM"),g("tsD"));});});
 $("prima").addEventListener("input",function(){if(lock)return;
   st.prima=this.value===""?NaN:parseFloat(this.value); checkPrima(); render();});
 $("nivel").addEventListener("change",function(){st.nivel=parseInt(this.value,10);render();});
@@ -224,12 +276,12 @@ $("ac").addEventListener("input",function(){if(lock||this.value==="")return;
   setS(sacFromAc(st.T,parseFloat(this.value)));});
 $("copy").addEventListener("click",function(){
   var T=st.T,cmax=comMaxOf(st.prima,T,st.nivel);
-  var txt="Premium "+fmtM.format(st.prima)+" · term "+T+" years · level "+st.nivel+
+  var txt="Premium "+fmtM.format(st.prima)+" · term "+termTxt()+" · level "+st.nivel+
     " · sacrifice "+sacTxt(st.s)+"%"+
     (cmax===null?"":" → commission "+fmtM.format(cmax*(1-st.s/100)))+
     " · admin charge "+pct(acOf(T,st.s))+"% p.a.";
   var b=this;
-  if(!primaOk) txt="Premium outside the accepted range · term "+T+" years · sacrifice "+sacTxt(st.s)+
+  if(!primaOk) txt="Premium outside the accepted range · term "+termTxt()+" · sacrifice "+sacTxt(st.s)+
     "% → admin charge "+pct(acOf(T,st.s))+"% p.a.";
   if(navigator.clipboard){navigator.clipboard.writeText(txt).then(function(){
     b.textContent="Copied";setTimeout(function(){b.textContent="Copy case summary";},1600);});}

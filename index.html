@@ -40,8 +40,17 @@
     </div>
     <div class="bcell">
       <span class="f-lab">Term <em id="termEcho">10 years</em></span>
-      <div class="rail"><input type="number" id="termN" value="10" min="3" max="10" step="0.25">
-        <input type="range" id="termR" value="10" min="3" max="10" step="0.25"></div>
+      <div class="seg" role="radiogroup" aria-label="Term mode">
+        <label><input type="radio" name="tmode" value="y" checked><span>Years</span></label>
+        <label><input type="radio" name="tmode" value="s"><span>Specific term</span></label>
+      </div>
+      <select id="termY" aria-label="Term in years"></select>
+      <div class="ymd" id="tSpec" hidden>
+        <label><span class="unit">Years</span><input type="number" id="tsY" min="3" max="10" step="1" value="10" inputmode="numeric"></label>
+        <label><span class="unit">Months</span><input type="number" id="tsM" min="0" max="11" step="1" value="0" inputmode="numeric"></label>
+        <label><span class="unit">Days</span><input type="number" id="tsD" min="0" max="30" step="1" value="0" inputmode="numeric"></label>
+      </div>
+      <span class="err" id="termErr"></span>
     </div>
     <div class="bcell">
       <span class="f-lab">Commission Level</span>
