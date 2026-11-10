@@ -6,7 +6,7 @@ juntos el **sacrificio de comisión**, la **comisión upfront del asesor** y el
 recalculan. El front está en inglés; el código y esta documentación, en español.
 
 Publicada con GitHub Pages desde la raíz de `main`:
-<https://franciscojose7.github.io/ilustrador-acs-v2/>
+<https://franciscojose7.github.io/ilustrador-acs-v3/>
 
 ## Estructura
 
