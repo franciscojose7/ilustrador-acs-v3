@@ -22,12 +22,34 @@ function pchip(xs,ys){var n=xs.length,h=[],d=[],i;
     var t=(x-xs[k])/h[k],t2=t*t,t3=t2*t;
     return (2*t3-3*t2+1)*ys[k]+(t3-2*t2+t)*h[k]*m[k]+(-2*t3+3*t2)*ys[k+1]+(t3-t2)*h[k]*m[k+1];};}
 
-/* ── Admin charge según término y sacrificio ────────────────────────── */
-var order=[10,9,8,7,6,5,4,3];
-var xs=order.map(function(t){return 1/t;});
-var f0=pchip(xs,order.map(function(t){return AC0[t];}));
-var f100=pchip(xs,order.map(function(t){return AC100[t];}));
-function ac0(T){return f0(1/T);} function ac100(T){return f100(1/T);}
+/* ── Admin charge según término y sacrificio ────────────────────────────
+   Regla del sistema (eApp, endpoint de comisión), validada punto a punto:
+     Total(T,s) = Min(T) + (Max(T) - Min(T)) * (1 - s)
+     Anual(T,s) = Total(T,s) / (dias(T) / 365)
+   Max y Min se interpolan LINEAL POR DIAS entre las anclas de ACS.ADMIN
+   ({terms:[3,4,5,8,10], max:[...], min:[...]}, en % del total del plazo).
+   Los dias de cada termino son dias calendario desde hoy, como el sistema.
+   Sin ACS.ADMIN en la tabla se cae a la curva vieja (pchip sobre AC0/AC100). */
+var ac0, ac100, ADMIN=ACS.ADMIN;
+if(ADMIN){
+  var D0=new Date(); D0=new Date(D0.getFullYear(),D0.getMonth(),D0.getDate());
+  var daysOf=function(T){var y=Math.floor(T+1e-9),
+    d=new Date(D0.getFullYear()+y,D0.getMonth(),D0.getDate());
+    return Math.round((d-D0)/864e5)+(T-y)*365;};
+  var AD=ADMIN.terms.map(daysOf);
+  var lin=function(ys,x){var n=AD.length,k;
+    if(x<=AD[0])return ys[0]; if(x>=AD[n-1])return ys[n-1];
+    for(k=0;k<n-1;k++){if(x<=AD[k+1])break;}
+    return ys[k]+(ys[k+1]-ys[k])*(x-AD[k])/(AD[k+1]-AD[k]);};
+  ac0=function(T){var d=daysOf(T);return lin(ADMIN.max,d)/(d/365);};
+  ac100=function(T){var d=daysOf(T);return lin(ADMIN.min,d)/(d/365);};
+}else{
+  var order=[10,9,8,7,6,5,4,3];
+  var xs=order.map(function(t){return 1/t;});
+  var f0=pchip(xs,order.map(function(t){return AC0[t];}));
+  var f100=pchip(xs,order.map(function(t){return AC100[t];}));
+  ac0=function(T){return f0(1/T);}; ac100=function(T){return f100(1/T);};
+}
 function acOf(T,s){var a=ac0(T);return a+(ac100(T)-a)*s/100;}
 function sacFromAc(T,v){var a=ac0(T),b=ac100(T);return (a-v)/(a-b)*100;}
 

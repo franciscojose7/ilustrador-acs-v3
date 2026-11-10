@@ -71,7 +71,8 @@ corre desde un workflow de GitHub Actions, donde sale de un secret.
 
 | Clave del JSON | Qué es |
 |---|---|
-| `AC0` / `AC100` | admin charge anual por término, con 0% y 100% de sacrificio |
+| `AC0` / `AC100` | admin charge anual por término, con 0% y 100% de sacrificio (solo si falta `ADMIN`) |
+| `ADMIN` | anclas del admin charge total por término: `{terms:[3,4,5,8,10], max, min}` en %; se interpola lineal por días y se divide por días/365 (regla del sistema) |
 | `MATRIX` | matriz publicada de admin charge (sacrificio × término) |
 | `LEVELS` | escala de comisión de la estructura |
 | `DEFAULT_LEVEL` | nivel que viene seleccionado al abrir |
